@@ -1,0 +1,6 @@
+[
+    {
+        "merged": "com.balaswamy.voicecontrol.app-release-44:/xml_accessibility_service_config.xml.flat",
+        "source": "com.balaswamy.voicecontrol.app-main-45:/xml/accessibility_service_config.xml"
+    }
+]
