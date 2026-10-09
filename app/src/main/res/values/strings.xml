@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">VoiceControl Assistant</string>
+    <string name="accessibility_service_name">VoiceControl Assistant</string>
+    <string name="accessibility_service_description">Allows VoiceControl Assistant to inspect and interact with screen content after voice verification authorizes a command. Enable explicitly in Android Accessibility settings.</string>
+</resources>
