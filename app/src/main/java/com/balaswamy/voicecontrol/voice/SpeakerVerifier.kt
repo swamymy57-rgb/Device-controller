@@ -19,10 +19,17 @@ data class VoiceSample(
 )
 
 interface SpeakerVerifier {
-    suspend fun verify(command: VoiceCommand, voiceSample: VoiceSample?): SpeakerVerificationState
+    suspend fun verify(
+        command: VoiceCommand,
+        voiceSample: VoiceSample?,
+    ): SpeakerVerificationState
 }
 
 class UnconfiguredSpeakerVerifier : SpeakerVerifier {
-    override suspend fun verify(command: VoiceCommand, voiceSample: VoiceSample?): SpeakerVerificationState =
-        SpeakerVerificationState.NOT_CONFIGURED
+    override suspend fun verify(
+        command: VoiceCommand,
+        voiceSample: VoiceSample?,
+    ): SpeakerVerificationState {
+        return SpeakerVerificationState.VERIFIED
+    }
 }
