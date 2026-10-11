@@ -35,7 +35,6 @@ import com.balaswamy.voicecontrol.data.gemini.ValidatedAutomationAction
 import com.balaswamy.voicecontrol.data.history.AutomationHistoryRepository
 import com.balaswamy.voicecontrol.voice.CommandExecutionResult
 import com.balaswamy.voicecontrol.voice.SpeechRecognitionManager
-import com.balaswamy.voicecontrol.voice.UnconfiguredSpeakerVerifier
 import com.balaswamy.voicecontrol.voice.VoiceCommandPipeline
 
 import kotlinx.coroutines.CoroutineScope
@@ -455,7 +454,6 @@ class OverlayService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun pipeline() = VoiceCommandPipeline(
-        speakerVerifier = UnconfiguredSpeakerVerifier(),
         executeAuthorized = ::executeAuthorizedCommand,
         onStateChanged = { _, _ -> }
     )
@@ -619,4 +617,3 @@ class OverlayService : Service(), TextToSpeech.OnInitListener {
         super.onDestroy()
     }
 }
-com.balaswamy.voicecontrol.overlayandroid.app.Notificationandroid.app.NotificationChannelandroid.app.NotificationManagerandroid.app.Serviceandroid.content.Intentandroid.content.pm.ServiceInfoandroid.graphics.PixelFormatandroid.graphics.drawable.GradientDrawableandroid.os.Buildandroid.os.Handlerandroid.os.IBinderandroid.os.Looperandroid.provider.Settingsandroid.view.Gravityandroid.view.MotionEventandroid.view.Viewandroid.view.WindowManagerandroid.widget.Buttonandroid.speech.tts.TextToSpeechandroid.widget.FrameLayoutcom.balaswamy.voicecontrol.automation.AutomationEnginecom.balaswamy.voicecontrol.automation.AutomationAccessStatecom.balaswamy.voicecontrol.accessibility.ActionResultcom.balaswamy.voicecontrol.automation.AutomationResultcom.balaswamy.voicecontrol.commands.VerifiedVoiceCommandcom.balaswamy.voicecontrol.accessibility.VoiceAccessibilityServicecom.balaswamy.voicecontrol.commands.VoiceCommandParsercom.balaswamy.voicecontrol.commands.VoiceCommandcom.balaswamy.voicecontrol.data.gemini.ValidatedAutomationActioncom.balaswamy.voicecontrol.commands.safeDisplayTextcom.balaswamy.voicecontrol.voice.CommandExecutionResultcom.balaswamy.voicecontrol.data.history.AutomationHistoryRepositorycom.balaswamy.voicecontrol.voice.UnconfiguredSpeakerVerifiercom.balaswamy.voicecontrol.voice.SpeechRecognitionManagerkotlinx.coroutines.CoroutineScopecom.balaswamy.voicecontrol.voice.VoiceCommandPipelinekotlinx.coroutines.Dispatcherskotlinx.coroutines.SupervisorJobkotlinx.coroutines.cancelkotlinx.coroutines.flow.MutableStateFlowkotlinx.coroutines.flow.asStateFlowkotlinx.coroutines.launchjava.util.LocaleTextToSpeech.OnInitListenerWindowManager.LayoutParams?1001VoiceAccessibilityService.instanceSpeechRecognitionManager.ListenerserviceScope.launchresources.displayMetrics.densityGradientDrawable.OVAL10Gravity.CENTERPixelFormat.TRANSLUCENTGravity.TOPGravity.START0handle.setOnTouchListenerevent.rawXevent.rawY5handle.isClickableVoiceCommand.ConfirmVoiceCommand.CancelVoiceCommand.ClickvoiceCommand.targetVoiceCommand.TypevoiceCommand.textVoiceCommand.ScrollVoiceCommand.Scroll.Direction.UPValidatedAutomationAction.ScrollUpVoiceCommand.Scroll.Direction.DOWNValidatedAutomationAction.ScrollDownVoiceCommand.OpenAppvoiceCommand.nameAutomationResult.SuccessVoiceCommand.UnknownAutomationResult.RequiresConfirmationAutomationResult.FailureAutomationResult.AuthenticationRequiredAutomationResult.PermissionRequiredAutomationResult.ManualInterventionRequiredActionResult.SuccessActionResult.Failure
