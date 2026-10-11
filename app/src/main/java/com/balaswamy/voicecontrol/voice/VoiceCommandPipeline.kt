@@ -21,14 +21,17 @@ data class CommandExecutionResult(
     val message: String,
 )
 
+/**
+ * Voice command pipeline without speaker verification.
+ * Accepts commands from any speaker and executes authorized commands.
+ */
 class VoiceCommandPipeline(
-    private val speakerVerifier: SpeakerVerifier,
     private val executeAuthorized: suspend (VerifiedVoiceCommand) -> CommandExecutionResult,
     private val onStateChanged: (AssistantState, String) -> Unit,
 ) {
     private val executionLock = Mutex()
 
-    suspend fun handleRecognizedCommand(transcript: String, voiceSample: VoiceSample? = null) =
+    suspend fun handleRecognizedCommand(transcript: String) =
         executionLock.withLock {
             val command = VoiceCommandParser.parse(transcript)
             if (command is VoiceCommand.Unknown) {
@@ -36,53 +39,22 @@ class VoiceCommandPipeline(
                 return@withLock
             }
 
-            onStateChanged(AssistantState.VERIFYING, "Verifying Voice")
-            val verification = try {
-                speakerVerifier.verify(command, voiceSample)
+            // No voice verification - accept command from any speaker
+            onStateChanged(AssistantState.AUTHORIZED, "Command recognized.")
+            onStateChanged(AssistantState.EXECUTING, "Executing")
+            try {
+                val result = executeAuthorized(VerifiedVoiceCommand.afterSuccessfulVerification(command))
+                onStateChanged(
+                    if (result.succeeded) AssistantState.IDLE else AssistantState.ERROR,
+                    result.message,
+                )
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
                 onStateChanged(
                     AssistantState.ERROR,
-                    "Voice verification failed: ${exception.localizedMessage ?: "unknown error"}",
+                    "Command failed: ${exception.localizedMessage ?: "unknown error"}",
                 )
-                return@withLock
-            }
-            when (verification) {
-                SpeakerVerificationState.VERIFIED -> {
-                    onStateChanged(AssistantState.AUTHORIZED, "Owner verification passed.")
-                    onStateChanged(AssistantState.EXECUTING, "Executing")
-                    try {
-                        val result = executeAuthorized(VerifiedVoiceCommand.afterSuccessfulVerification(command))
-                        onStateChanged(
-                            if (result.succeeded) AssistantState.IDLE else AssistantState.ERROR,
-                            result.message,
-                        )
-                    } catch (exception: CancellationException) {
-                        throw exception
-                    } catch (exception: Exception) {
-                        onStateChanged(
-                            AssistantState.ERROR,
-                            "Command failed: ${exception.localizedMessage ?: "unknown error"}",
-                        )
-                    }
-                }
-                SpeakerVerificationState.NOT_CONFIGURED ->
-                    onStateChanged(
-                        AssistantState.ERROR,
-                        "Speaker verification is not configured; command not executed.",
-                    )
-                SpeakerVerificationState.REJECTED ->
-                    onStateChanged(AssistantState.ERROR, "Voice verification failed; command not executed.")
-                SpeakerVerificationState.ERROR ->
-                    onStateChanged(
-                        AssistantState.ERROR,
-                        "Voice verification encountered an error; command not executed.",
-                    )
-                SpeakerVerificationState.ENROLLING,
-                SpeakerVerificationState.READY,
-                SpeakerVerificationState.VERIFYING,
-                -> onStateChanged(AssistantState.ERROR, "Voice verification did not authorize this command.")
             }
         }
 }
