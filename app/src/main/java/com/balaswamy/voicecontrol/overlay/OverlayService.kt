@@ -15,7 +15,10 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.LinearLayout
+import android.widget.FrameLayout
+import android.graphics.drawable.GradientDrawable
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 import android.widget.TextView
 import com.balaswamy.voicecontrol.automation.AutomationAccessState
 import com.balaswamy.voicecontrol.automation.AutomationEngine
@@ -41,14 +44,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
-class OverlayService : Service() {
+class OverlayService : Service(), TextToSpeech.OnInitListener {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var windowManager: WindowManager
-    private lateinit var statusView: TextView
-    private lateinit var commandView: TextView
     private lateinit var listenButton: Button
     private var overlayView: View? = null
     private var speechRecognitionManager: SpeechRecognitionManager? = null
+    private var textToSpeech: TextToSpeech? = null
     private var isListening = false
     private var layoutParams: WindowManager.LayoutParams? = null
     private lateinit var automationEngine: AutomationEngine
@@ -74,6 +76,10 @@ class OverlayService : Service() {
             stopSelf()
             return
         }
+        
+        // Text-To-Speech ఇనిషియలైజేషన్ (స్పీకర్ కోసం)
+        textToSpeech = TextToSpeech(this, this)
+
         historyRepository = AutomationHistoryRepository(applicationContext)
         automationEngine = AutomationEngine(
             accessState = {
@@ -89,24 +95,47 @@ class OverlayService : Service() {
         )
         createOverlay()
         _isRunning.value = true
+        
         speechRecognitionManager = SpeechRecognitionManager(this, object : SpeechRecognitionManager.Listener {
             override fun onResult(text: String) {
-                isListening = false
-                listenButton.text = "Listen"
-                commandView.text = "Command: ${VoiceCommandParser.parse(text).safeDisplayText()}"
-                updateStatus("Verifying owner...")
+                val parsedText = VoiceCommandParser.parse(text).safeDisplayText()
+                speakOut("స్క్రీన్ పై ఉన్న సమాచారం: $parsedText")
+                
                 serviceScope.launch {
                     pipeline().handleRecognizedCommand(text)
                 }
+                
+                // మైక్ ఎప్పుడూ ఆన్‌లో ఉండేలా (Continuous Listening) మళ్లీ స్టార్ట్ చేయడం
+                startContinuousListening()
             }
 
-            override fun onError(@Suppress("UNUSED_PARAMETER") message: String) {
-                isListening = false
-                listenButton.text = "Listen"
-                updateStatus("Listening unavailable")
+            override fun onError(message: String) {
+                // ఎర్రర్ వచ్చినప్పటికీ మైక్ కంటిన్యూగా వినేలా రీస్టార్ట్ చేయడం
+                startContinuousListening()
             }
         })
+        
+        // సర్వీస్ స్టార్ట్ అవ్వగానే ఆటోమేటిక్‌గా మైక్ ఆన్ అవుతుంది
+        startContinuousListening()
         updateStatus("Ready")
+    }
+
+    private fun startContinuousListening() {
+        if (!isListening) {
+            isListening = true
+            speechRecognitionManager?.startListening()
+            updateStatus("Listening...")
+        }
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            textToSpeech?.language = Locale("te", "IN") // తెలుగు సపోర్ట్ కోసం
+        }
+    }
+
+    private fun speakOut(text: String) {
+        textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -121,6 +150,8 @@ class OverlayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
         speechRecognitionManager?.destroy()
         speechRecognitionManager = null
         serviceScope.cancel()
@@ -134,63 +165,54 @@ class OverlayService : Service() {
 
     private fun createOverlay() {
         val density = resources.displayMetrics.density
-        val panel = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding((14 * density).toInt(), (12 * density).toInt(), (14 * density).toInt(), (12 * density).toInt())
-            setBackgroundColor(0xEE202124.toInt())
+        
+        // రౌండ్ షేప్ సర్కిల్ బ్యాక్‌గ్రౌండ్ (Floating Icon)
+        val circleDrawable = GradientDrawable().apply {
+            shape = GradientDrawable.OVA
+            setColor(0xEE202124.toInt())
         }
 
-        val header = TextView(this).apply {
-            text = "VoiceControl Assistant"
-            textSize = 16f
-            setTextColor(0xFFFFFFFF.toInt())
-            setPadding(0, 0, 0, (6 * density).toInt())
+        // చిన్న రౌండ్ ఫ్లోటింగ్ ఐకాన్ లేఅవుట్
+        val panel = FrameLayout(this).apply {
+            background = circleDrawable
+            setPadding((8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt(), (8 * density).toInt())
         }
-        statusView = TextView(this).apply {
-            text = "● Ready"
-            textSize = 15f
-            setTextColor(0xFFFFFFFF.toInt())
-        }
-        commandView = TextView(this).apply {
-            text = "Command: —"
-            textSize = 12f
-            setTextColor(0xFFCCCCCC.toInt())
-            setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
-        }
+
         listenButton = Button(this).apply {
-            text = "Listen"
+            text = "🎙️"
+            textSize = 18f
+            setTextColor(0xFFFFFFFF.toInt())
+            background = null // డిఫాల్ట్ బటన్ బాక్స్ పోయి రౌండ్‌గా ఉండటానికి
             setOnClickListener {
                 if (isListening) {
                     speechRecognitionManager?.stopListening()
                     isListening = false
-                    text = "Listen"
-                    updateStatus("Ready")
+                    updateStatus("Paused")
                 } else {
-                    isListening = true
-                    text = "Stop"
-                    updateStatus("Listening...")
-                    speechRecognitionManager?.startListening()
+                    startContinuousListening()
                 }
             }
         }
-        val closeButton = Button(this).apply {
-            text = "Close Assistant"
-            setOnClickListener { stopSelf() }
+
+        val params = FrameLayout.LayoutParams(
+            (55 * density).toInt(),
+            (55 * density).toInt()
+        ).apply {
+            gravity = Gravity.CENTER
         }
-        panel.addView(header)
-        panel.addView(statusView)
-        panel.addView(commandView)
-        panel.addView(listenButton)
-        panel.addView(closeButton)
+
+        panel.addView(listenButton, params)
+
         val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
         } else {
             @Suppress("DEPRECATION")
             WindowManager.LayoutParams.TYPE_PHONE
         }
+        
         val layoutParams = WindowManager.LayoutParams(
-            (280 * density).toInt(),
-            WindowManager.LayoutParams.WRAP_CONTENT,
+            (65 * density).toInt(),
+            (65 * density).toInt(),
             overlayType,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
@@ -201,10 +223,11 @@ class OverlayService : Service() {
             x = (16 * density).toInt()
             y = (120 * density).toInt()
         }
+        
         windowManager.addView(panel, layoutParams)
         overlayView = panel
         this.layoutParams = layoutParams
-        enableDragging(header)
+        enableDragging(panel)
     }
 
     private fun enableDragging(handle: View) {
@@ -251,15 +274,12 @@ class OverlayService : Service() {
             Notification.Builder(this)
         }.setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("VoiceControl Assistant")
-            .setContentText("Floating assistant is available.")
+            .setContentText("Continuous listening active.")
             .setOngoing(true)
             .build()
+            
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(
-                NOTIFICATION_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
-            )
+            startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
@@ -268,33 +288,7 @@ class OverlayService : Service() {
     private fun pipeline() = VoiceCommandPipeline(
         speakerVerifier = UnconfiguredSpeakerVerifier(),
         executeAuthorized = ::executeAuthorizedCommand,
-        onStateChanged = { state, message ->
-            val label = when (state) {
-                AssistantState.IDLE -> "Ready"
-                AssistantState.LISTENING -> "Listening"
-                AssistantState.VERIFYING -> "Verifying owner..."
-                AssistantState.AUTHORIZED -> "Authorized"
-                AssistantState.EXECUTING -> "Executing..."
-                AssistantState.ERROR -> "Error"
-            }
-            val visibleStatus = when {
-                state == AssistantState.IDLE && message.startsWith("Command completed") -> "Success"
-                message.contains("Manual verification required", ignoreCase = true) ->
-                    "Manual verification required"
-                message.contains("confirmation required", ignoreCase = true) ->
-                    "Confirmation required"
-                message.contains("permission", ignoreCase = true) ->
-                    "Permission required"
-                message.contains("not configured", ignoreCase = true) ->
-                    "Owner voice verification not configured"
-                message.contains("not executed", ignoreCase = true) -> "Not executed"
-                state == AssistantState.IDLE -> "Ready"
-                state == AssistantState.ERROR && message.startsWith("Unrecognized") -> "Command not recognized"
-                state == AssistantState.ERROR -> "Not completed"
-                else -> label
-            }
-            updateStatus(visibleStatus)
-        },
+        onStateChanged = { _, _ -> },
     )
 
     private fun executeAuthorizedCommand(command: VerifiedVoiceCommand): CommandExecutionResult {
@@ -302,9 +296,9 @@ class OverlayService : Service() {
             VoiceCommand.Confirm -> automationEngine.confirmPendingAction(ownerAuthenticated = true)
             VoiceCommand.Cancel -> {
                 if (automationEngine.cancelPendingAction()) {
-                    AutomationResult.Success("Pending action cancelled.")
+                    AutomationResult.Success("ధృవీకరణ రద్దు చేయబడింది.")
                 } else {
-                    AutomationResult.Failure("There is no pending action to cancel.")
+                    AutomationResult.Failure("రద్దు చేయడానికి ఏమీ లేదు.")
                 }
             }
             is VoiceCommand.Click -> automationEngine.execute(
@@ -329,17 +323,18 @@ class OverlayService : Service() {
             is VoiceCommand.GenerateCode,
             is VoiceCommand.AskAI,
             is VoiceCommand.Unknown,
-            -> AutomationResult.Failure("This command is not an accessibility action.")
+            -> AutomationResult.Failure("ఈ కమాండ్ యాక్సెసిబిలిటీకి సంబంధించినది కాదు.")
         }
-        try {
-            historyRepository.record(command.command, result)
-        } catch (exception: IllegalStateException) {
-            updateStatus("History unavailable")
-        } catch (exception: SecurityException) {
-            updateStatus("History unavailable")
+        
+        // ఫలితాన్ని స్పీకర్ ద్వారా వినిపించడం
+        when (result) {
+            is AutomationResult.Success -> speakOut(result.message)
+            is AutomationResult.Failure -> speakOut(result.message)
+            else -> {}
         }
+
         return when (result) {
-            is AutomationResult.Success -> CommandExecutionResult(true, "Command completed successfully.")
+            is AutomationResult.Success -> CommandExecutionResult(true, result.message)
             is AutomationResult.Failure -> CommandExecutionResult(false, result.message)
             is AutomationResult.RequiresConfirmation -> CommandExecutionResult(false, result.message)
             is AutomationResult.PermissionRequired -> CommandExecutionResult(false, result.message)
@@ -347,33 +342,18 @@ class OverlayService : Service() {
             is AutomationResult.ManualInterventionRequired -> CommandExecutionResult(false, result.message)
         }
     }
+
     private fun performAccessibilityAction(action: ValidatedAutomationAction): AutomationResult {
         val service = VoiceAccessibilityService.instance
             ?: return AutomationResult.PermissionRequired("Accessibility Service is not connected.")
         return when (val result = service.execute(action)) {
             is ActionResult.Success -> AutomationResult.Success(result.message)
-            is ActionResult.Failure -> {
-                if (result.message == "Manual verification required.") {
-                    AutomationResult.ManualInterventionRequired(result.message)
-                } else {
-                    AutomationResult.Failure(result.message)
-                }
-            }
+            is ActionResult.Failure -> AutomationResult.Failure(result.message)
         }
     }
 
     private fun updateStatus(status: String) {
         currentStatus = status
         _assistantStatus.value = status
-        if (::statusView.isInitialized) {
-            statusView.text = when (status) {
-                "Ready", "Success" -> "● $status"
-                "Listening..." -> "● Listening..."
-                "Verifying owner..." -> "● Verifying owner..."
-                "Executing..." -> "● Executing..."
-                else -> "● $status"
-            }
-        }
     }
-
 }
